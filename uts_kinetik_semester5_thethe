@@ -1,0 +1,162 @@
+import cv2
+import mediapipe as mp
+import serial
+import time
+
+
+# ==========================================
+# ARDUINO
+# ==========================================
+
+arduino = serial.Serial(
+    'COM5',
+    9600,
+    timeout=1
+)
+
+time.sleep(2)
+
+print("Arduino terhubung")
+
+
+# ==========================================
+# MEDIAPIPE
+# ==========================================
+
+mp_pose = mp.solutions.pose
+mp_drawing = mp.solutions.drawing_utils
+
+pose = mp_pose.Pose(
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
+)
+
+
+# ==========================================
+# KAMERA
+# ==========================================
+
+kamera = cv2.VideoCapture(0)
+
+
+# ==========================================
+# STATUS
+# ==========================================
+
+manusiaTerdeteksi = False
+
+
+# ==========================================
+# LOOP
+# ==========================================
+
+while True:
+
+    ret, frame = kamera.read()
+
+    if not ret:
+        print("Kamera tidak ditemukan")
+        break
+
+
+    # Mirror kamera
+    frame = cv2.flip(frame, 1)
+
+
+    # BGR → RGB
+    rgb = cv2.cvtColor(
+        frame,
+        cv2.COLOR_BGR2RGB
+    )
+
+
+    # MediaPipe
+    hasil = pose.process(rgb)
+
+
+    # ======================================
+    # ADA MANUSIA
+    # ======================================
+
+    if hasil.pose_landmarks:
+
+        if manusiaTerdeteksi == False:
+
+            print("MANUSIA → OPEN")
+
+            arduino.write(b"OPEN\n")
+
+            manusiaTerdeteksi = True
+
+
+        mp_drawing.draw_landmarks(
+            frame,
+            hasil.pose_landmarks,
+            mp_pose.POSE_CONNECTIONS
+        )
+
+
+    # ======================================
+    # TIDAK ADA MANUSIA
+    # ======================================
+
+    else:
+
+        if manusiaTerdeteksi == True:
+
+            print("TIDAK ADA MANUSIA → CLOSE")
+
+            arduino.write(b"CLOSE\n")
+
+            manusiaTerdeteksi = False
+
+
+    # ======================================
+    # TAMPILKAN
+    # ======================================
+
+    if manusiaTerdeteksi:
+
+        cv2.putText(
+            frame,
+            "MANUSIA TERDETEKSI - OPEN",
+            (20, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 255, 0),
+            2
+        )
+
+    else:
+
+        cv2.putText(
+            frame,
+            "TIDAK ADA MANUSIA - CLOSE",
+            (20, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 0, 255),
+            2
+        )
+
+
+    cv2.imshow(
+        "MediaPipe + Arduino",
+        frame
+    )
+
+
+    # Tekan Q untuk keluar
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+
+# ==========================================
+# SELESAI
+# ==========================================
+
+kamera.release()
+
+cv2.destroyAllWindows()
+
+arduino.close()
